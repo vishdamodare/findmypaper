@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StudentYear {
+  FE
+  SE
+  TE
+  BE
+}
+
+enum AdminLevel {
+  SUPER
+  EDITOR
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  passwordHash   String? // null for Google-only accounts
+  image          String?
+  universityId   String?
+  courseId       String?
+  branchId       String?
+  academicYearId String?
+  semesterNo     Int?
+  createdAt      DateTime @default(now())
+
+  university   University?   @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  course       Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  admin        Admin?
+  bookmarks    Bookmark[]
+  downloads    Download[]
+  uploads      Resource[]
+  resetTokens  PasswordResetToken[]
+}
+
+model Admin {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  level     AdminLevel @default(EDITOR)
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model University {
+  id         String       @id @default(cuid())
+  name       String       @unique
+  slug       String       @unique
+  city       String?
+  courses    Course[]
+  regulation Regulation[]
+  users      User[]
+}
+
+model Course {
+  id           String     @id @default(cuid())
+  universityId String
+  name         String
+  slug         String
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  branches     Branch[]
+  users        User[]
+
+  @@unique([universityId, slug])
+}
+
+model Branch {
+  id       String    @id @default(cuid())
+  courseId String
+  name     String
+  code     String
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  subjects Subject[]
+  users    User[]
+
+  @@unique([courseId, code])
+}
+
+model Regulation {
+  id           String     @id @default(cuid())
+  universityId String
+  name         String
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  subjects     Subject[]
+
+  @@unique([universityId, name])
+}
+
+model AcademicYear {
+  id        String     @id @default(cuid())
+  label     String     @unique // "2026-27"
+  startYear Int
+  resources Resource[]
+  users     User[]
+}
+
+model Semester {
+  id          String      @id @default(cuid())
+  number      Int         @unique
+  studentYear StudentYear
+  subjects    Subject[]
+}
+
+model Subject {
+  id           String     @id @default(cuid())
+  code         String
+  name         String
+  branchId     String
+  regulationId String
+  semesterId   String
+  createdAt    DateTime   @default(now())
+  branch       Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  regulation   Regulation @relation(fields: [regulationId], references: [id], onDelete: Cascade)
+  semester     Semester   @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  resources    Resource[]
+
+  @@unique([branchId, regulationId, code])
+  @@index([branchId, regulationId, semesterId])
+  @@index([name])
+}
+
+model ResourceCategory {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  resources   Resource[]
+}
+
+model Resource {
+  id             String   @id @default(cuid())
+  title          String
+  description    String?
+  subjectId      String
+  categoryId     String
+  academicYearId String
+  uploadedById   String?
+  fileKey        String   @unique
+  fileName       String
+  mimeType       String
+  fileSize       Int
+  downloadCount  Int      @default(0)
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  subject      Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  category     ResourceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  academicYear AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  uploadedBy   User?            @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  bookmarks    Bookmark[]
+  downloads    Download[]
+
+  @@index([subjectId, categoryId])
+  @@index([academicYearId])
+  @@index([createdAt])
+  @@index([downloadCount])
+}
+
+model Bookmark {
+  userId     String
+  resourceId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, resourceId])
+}
+
+model Download {
+  id         String   @id @default(cuid())
+  userId     String?
+  resourceId String
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([resourceId])
+}
